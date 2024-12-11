@@ -79,6 +79,8 @@ contract LoopStrategy is
     error MaxFeeExceeded();
     /// @notice Emitted when the fee recipient address is zero.
     error ZeroFeeRecipient();
+    /// @notice Emitted when the caller is unauthorized.
+    error Unauthorized();
 
     /// @inheritdoc ILoopStrategy
     function initialize(
@@ -456,6 +458,7 @@ contract LoopStrategy is
      * @dev Reverts if the swap fails or the resulting amounts are insufficient to complete the process.
      */
     function onMoreFlashLoan(uint256 assets, bytes calldata data) external {
+        if (msg.sender != address(markets)) revert Unauthorized();
         (
             uint256 sharesToRepay,
             uint256 collateralToWithdraw,
