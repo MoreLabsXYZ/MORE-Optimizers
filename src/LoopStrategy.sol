@@ -70,6 +70,9 @@ contract LoopStrategy is
     /// @inheritdoc ILoopStrategy
     uint256 public lastTotalAssets;
 
+    /// @dev Market parameters
+    MarketParams internal _marketParams;
+
     /// @dev Maximum allowed fee (50%, expressed as 0.5e18).
     uint256 internal constant MAX_FEE = 0.5e18;
 
@@ -120,6 +123,29 @@ contract LoopStrategy is
         protocolFeeManager = _protocolFeeManager;
         swapMaxLossPercent = _swapMaxLossPercent;
 
+        (
+            bool isPrem,
+            address loanToken,
+            address collateralToken,
+            address oracle,
+            address irm,
+            uint256 lltv,
+            address cas,
+            uint96 irxMaxLltv,
+            uint256[] memory lltvsFromContract
+        ) = markets.idToMarketParams(marketId);
+        _marketParams = MarketParams(
+            isPrem,
+            loanToken,
+            collateralToken,
+            oracle,
+            irm,
+            lltv,
+            cas,
+            irxMaxLltv,
+            lltvsFromContract
+        );
+
         SafeERC20.forceApprove(
             IERC20(wFlow),
             address(vault),
@@ -136,17 +162,13 @@ contract LoopStrategy is
             type(uint256).max
         );
 
-        defaultPath = abi.encodePacked(
-            address(wFlow),
-            uint24(500),
-            address(ankrFlow)
-        );
+        defaultPath = abi.encodePacked(wFlow, uint24(500), address(ankrFlow));
     }
 
     /// @dev This function is called when the FLOW token is sent to the contract and
     /// should be wrapped in any cases beside wrap operations.
     receive() external payable {
-        if (msg.sender != address(wFlow)) {
+        if (msg.sender != wFlow) {
             IWNative(wFlow).deposit{value: msg.value}();
         }
     }
@@ -255,7 +277,7 @@ contract LoopStrategy is
             uint256 ankrFlowAmount
         )
     {
-        uint256 percentage = calculatePercentage(assets);
+        uint256 percentage = _calculatePercentage(assets);
 
         Position memory position = markets.position(marketId, address(this));
         ankrFlowAmount = position.collateral.wMulDown(percentage);
@@ -332,6 +354,7 @@ contract LoopStrategy is
         uint256 assets,
         address receiver
     ) public override(IERC4626, ERC4626Upgradeable) returns (uint256 shares) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Update `lastTotalAssets` to avoid an inconsistent state in a re-entrant context.
@@ -353,6 +376,7 @@ contract LoopStrategy is
         uint256 shares,
         address receiver
     ) public override(IERC4626, ERC4626Upgradeable) returns (uint256 assets) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Update `lastTotalAssets` to avoid an inconsistent state in a re-entrant context.
@@ -376,6 +400,7 @@ contract LoopStrategy is
         address owner,
         bytes memory path
     ) public returns (uint256 shares) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Do not call expensive `maxWithdraw` and optimistically withdraw assets.
@@ -400,6 +425,7 @@ contract LoopStrategy is
         address owner,
         bytes memory path
     ) public returns (uint256 assets) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Do not call expensive `maxRedeem` and optimistically redeem shares.
@@ -421,6 +447,7 @@ contract LoopStrategy is
         address receiver,
         address owner
     ) public override(IERC4626, ERC4626Upgradeable) returns (uint256 shares) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Do not call expensive `maxWithdraw` and optimistically withdraw assets.
@@ -431,9 +458,8 @@ contract LoopStrategy is
             newTotalAssets,
             Math.Rounding.Ceil
         );
-        // `newTotalAssets - assets` may be a little off from `totalAssets()`.
         _updateLastTotalAssets(newTotalAssets.zeroFloorSub(assets));
-
+        // `newTotalAssets - assets` may be a little off from `totalAssets()`.
         _withdraw(_msgSender(), receiver, owner, assets, shares, defaultPath);
     }
 
@@ -443,6 +469,7 @@ contract LoopStrategy is
         address receiver,
         address owner
     ) public override(IERC4626, ERC4626Upgradeable) returns (uint256 assets) {
+        markets.accrueInterest(_marketParams);
         uint256 newTotalAssets = _accrueFee();
 
         // Do not call expensive `maxRedeem` and optimistically redeem shares.
@@ -476,18 +503,14 @@ contract LoopStrategy is
             uint256 collateralToWithdraw,
             uint256 assetsToWithdraw,
             address receiver,
-            MarketParams memory marketParams,
             bytes memory path
-        ) = abi.decode(
-                data,
-                (uint256, uint256, uint256, address, MarketParams, bytes)
-            );
+        ) = abi.decode(data, (uint256, uint256, uint256, address, bytes));
 
         SafeERC20.forceApprove(IERC20(wFlow), address(markets), assets);
-        markets.repay(marketParams, 0, sharesToRepay, address(this), "");
+        markets.repay(_marketParams, 0, sharesToRepay, address(this), "");
         SafeERC20.forceApprove(IERC20(wFlow), address(markets), 0);
         markets.withdrawCollateral(
-            marketParams,
+            _marketParams,
             collateralToWithdraw,
             address(this),
             address(this)
@@ -659,29 +682,6 @@ contract LoopStrategy is
         uint256 assets,
         uint256 shares
     ) internal override nonReentrant {
-        (
-            bool isPrem,
-            address loanToken,
-            address collateralToken,
-            address oracle,
-            address irm,
-            uint256 lltv,
-            address cas,
-            uint96 irxMaxLltv,
-            uint256[] memory lltvsFromContract
-        ) = markets.idToMarketParams(marketId);
-        MarketParams memory marketParams = MarketParams(
-            isPrem,
-            loanToken,
-            collateralToken,
-            oracle,
-            irm,
-            lltv,
-            cas,
-            irxMaxLltv,
-            lltvsFromContract
-        );
-
         SafeERC20.safeTransferFrom(
             IERC20(asset()),
             caller,
@@ -702,14 +702,14 @@ contract LoopStrategy is
         staking.stakeCerts{value: toSupplyAsCollateralInFlow}();
 
         markets.supplyCollateral(
-            marketParams,
+            _marketParams,
             toSupplyAsCollateral,
             address(this),
             ""
         );
 
         (uint256 borrowedAssets, ) = markets.borrow(
-            marketParams,
+            _marketParams,
             toSupply,
             0,
             address(this),
@@ -726,7 +726,7 @@ contract LoopStrategy is
         );
 
         markets.supplyCollateral(
-            marketParams,
+            _marketParams,
             newCollateral,
             address(this),
             ""
@@ -759,7 +759,7 @@ contract LoopStrategy is
 
             if (newUtilization < targetUtilization) {
                 (borrowedAssets, ) = markets.borrow(
-                    marketParams,
+                    _marketParams,
                     newAmountToBorrowInFlow,
                     0,
                     address(this),
@@ -771,7 +771,7 @@ contract LoopStrategy is
                     market.totalBorrowAssets
                 ) {
                     (borrowedAssets, ) = markets.borrow(
-                        marketParams,
+                        _marketParams,
                         market.totalSupplyAssets.wMulDown(targetUtilization) -
                             market.totalBorrowAssets,
                         0,
@@ -789,7 +789,7 @@ contract LoopStrategy is
             );
 
             markets.supplyCollateral(
-                marketParams,
+                _marketParams,
                 lastCollateral,
                 address(this),
                 ""
@@ -816,7 +816,7 @@ contract LoopStrategy is
         emit Deposit(caller, receiver, assets, shares);
     }
 
-    /// @dev Returns the maximum amount of assets that the vault can supply to strategy.
+    /// @dev Returns the maximum amount of assets that the vault can supply on strategy.
     function _maxDeposit() internal view returns (uint256 totalSuppliable) {
         Market memory market = markets.market(marketId);
 
@@ -889,32 +889,7 @@ contract LoopStrategy is
 
         _burn(owner, shares);
 
-        (
-            bool isPrem,
-            address loanToken,
-            address collateralToken,
-            address oracle,
-            address irm,
-            uint256 lltv,
-            address cas,
-            uint96 irxMaxLltv,
-            uint256[] memory lltvsFromContract
-        ) = markets.idToMarketParams(marketId);
-        MarketParams memory marketParams = MarketParams(
-            isPrem,
-            loanToken,
-            collateralToken,
-            oracle,
-            irm,
-            lltv,
-            cas,
-            irxMaxLltv,
-            lltvsFromContract
-        );
-
-        uint256 percentage = calculatePercentage(assets);
-
-        markets.accrueInterest(marketParams);
+        uint256 percentage = _calculatePercentage(assets);
 
         Position memory position = markets.position(marketId, address(this));
         uint256 collateralToWithdraw = position.collateral.wMulDown(percentage);
@@ -938,7 +913,6 @@ contract LoopStrategy is
                 collateralToWithdraw,
                 assets,
                 receiver,
-                marketParams,
                 path
             )
         );
@@ -963,7 +937,7 @@ contract LoopStrategy is
      * @param assets The amount of assets to withdraw.
      * @return percentage The withdrawal percentage (scaled by 1e18).
      */
-    function calculatePercentage(
+    function _calculatePercentage(
         uint256 assets
     ) internal view returns (uint256 percentage) {
         percentage = assets.wDivDown(totalAssets());
@@ -974,11 +948,6 @@ contract LoopStrategy is
         }
     }
 
-    /// @notice Calculates the amounts to supply as collateral and to the vault
-    /// @dev This function performs calculations based on the provided `assets` and strategy-specific parameters.
-    /// @param assets The amount of assets to calculate supply amounts for.
-    /// @return toSupplyAsCollateral The amount to be supplied as collateral in ankrFlow.
-    /// @return toSupply The amount to be provided as supply to the vault in FLOW.
     function _calculateAmountsToSupply(
         uint256 assets
     ) internal view returns (uint256 toSupplyAsCollateral, uint256 toSupply) {
