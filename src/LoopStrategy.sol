@@ -826,7 +826,7 @@ contract LoopStrategy is
         );
         if (utilization > targetUtilization) return 0;
 
-        // Since totolSuppliable in our case should be equal to
+        // Since totalSuppliable in our case should be equal to
         // targetUtilization = (totalBorrowAssets + totalSuppliable) / (totalSupplyAssets + totalSuppliable)
         // we can calculate totalSuppliable as follows
         // totalSuppliable = (targetUtilization * totalSupplyAssets - totalBorrowAssets) / (WAD - targetUtilization)
