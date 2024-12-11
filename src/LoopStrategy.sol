@@ -763,7 +763,7 @@ contract LoopStrategy is
                 );
             } else {
                 if (
-                    market.totalSupplyAssets.wMulDown(targetUtilization) !=
+                    market.totalSupplyAssets.wMulDown(targetUtilization) >
                     market.totalBorrowAssets
                 ) {
                     (borrowedAssets, ) = markets.borrow(
