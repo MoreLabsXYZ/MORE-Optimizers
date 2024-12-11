@@ -18,6 +18,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {Ownable2StepUpgradeable, OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import {IERC4626, ERC4626Upgradeable, Math, SafeERC20, IERC20, ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IWNative} from "./interfaces/IWNative.sol";
 
@@ -26,7 +27,8 @@ contract LoopStrategy is
     ERC4626Upgradeable,
     ERC20PermitUpgradeable,
     Ownable2StepUpgradeable,
-    MulticallUpgradeable
+    MulticallUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     using MathLib for uint128;
     using MathLib for uint256;
@@ -104,6 +106,7 @@ contract LoopStrategy is
         __ERC20_init(_name, _symbol);
         __Ownable_init(owner);
         _transferOwnership(owner);
+        __ReentrancyGuard_init();
 
         markets = IMoreMarkets(moreMarkets);
         staking = ILiquidTokenStakingPool(_staking);
@@ -645,7 +648,7 @@ contract LoopStrategy is
         address receiver,
         uint256 assets,
         uint256 shares
-    ) internal override {
+    ) internal override nonReentrant {
         (
             bool isPrem,
             address loanToken,
@@ -862,7 +865,7 @@ contract LoopStrategy is
         uint256 assets,
         uint256 shares,
         bytes memory path
-    ) internal {
+    ) internal nonReentrant {
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
