@@ -417,9 +417,10 @@ contract LoopStrategy is
             newTotalAssets,
             Math.Rounding.Ceil
         );
-        _withdraw(_msgSender(), receiver, owner, assets, shares, defaultPath);
         // `newTotalAssets - assets` may be a little off from `totalAssets()`.
         _updateLastTotalAssets(newTotalAssets.zeroFloorSub(assets));
+
+        _withdraw(_msgSender(), receiver, owner, assets, shares, defaultPath);
     }
 
     /// @inheritdoc IERC4626
