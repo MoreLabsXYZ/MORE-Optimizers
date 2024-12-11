@@ -199,22 +199,6 @@ interface ILoopStrategy is IERC4626 {
     function targetStrategyLtv() external view returns (uint256);
 
     /**
-     * @notice Returns the parameters of the associated market.
-     */
-    function paramsOfTheMarket()
-        external
-        view
-        returns (
-            uint128 totalSupplyAssets,
-            uint128 totalSupplyShares,
-            uint128 totalBorrowAssets,
-            uint128 totalBorrowShares,
-            uint128 lastUpdate,
-            uint128 fee,
-            uint256 premiumFee
-        );
-
-    /**
      * @notice Returns the maximum allowable loss percentage during swaps.
      * @return Maximum loss percentage (scaled by 1e18).
      */

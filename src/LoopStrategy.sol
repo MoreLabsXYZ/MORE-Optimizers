@@ -53,9 +53,6 @@ contract LoopStrategy is
     uint256 public targetUtilization;
     /// @inheritdoc ILoopStrategy
     uint256 public targetStrategyLtv;
-
-    /// @inheritdoc ILoopStrategy
-    Market public paramsOfTheMarket;
     /// @inheritdoc ILoopStrategy
     uint256 public swapMaxLossPercent;
 
