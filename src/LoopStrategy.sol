@@ -485,6 +485,7 @@ contract LoopStrategy is
 
         SafeERC20.forceApprove(IERC20(wFlow), address(markets), assets);
         markets.repay(marketParams, 0, sharesToRepay, address(this), "");
+        SafeERC20.forceApprove(IERC20(wFlow), address(markets), 0);
         markets.withdrawCollateral(
             marketParams,
             collateralToWithdraw,
