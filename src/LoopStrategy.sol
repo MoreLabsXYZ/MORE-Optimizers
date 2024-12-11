@@ -120,12 +120,21 @@ contract LoopStrategy is
         protocolFeeManager = _protocolFeeManager;
         swapMaxLossPercent = _swapMaxLossPercent;
 
-        IWNative(wFlow).approve(address(vault), type(uint256).max);
-        ICertificateToken(ankrFlow).approve(
+        SafeERC20.forceApprove(
+            IERC20(wFlow),
+            address(vault),
+            type(uint256).max
+        );
+        SafeERC20.forceApprove(
+            IERC20(ankrFlow),
             address(markets),
             type(uint256).max
         );
-        ICertificateToken(ankrFlow).approve(address(router), type(uint256).max);
+        SafeERC20.forceApprove(
+            IERC20(ankrFlow),
+            address(router),
+            type(uint256).max
+        );
 
         defaultPath = abi.encodePacked(
             address(wFlow),
@@ -474,7 +483,7 @@ contract LoopStrategy is
                 (uint256, uint256, uint256, address, MarketParams, bytes)
             );
 
-        IWNative(wFlow).approve(address(markets), assets);
+        SafeERC20.forceApprove(IERC20(wFlow), address(markets), assets);
         markets.repay(marketParams, 0, sharesToRepay, address(this), "");
         markets.withdrawCollateral(
             marketParams,
@@ -502,7 +511,7 @@ contract LoopStrategy is
             receiver,
             collateralToWithdraw - cost
         );
-        IWNative(wFlow).approve(address(markets), assets);
+        SafeERC20.forceApprove(IERC20(wFlow), address(markets), assets);
     }
 
     /// @dev Updates `lastTotalAssets` to `updatedTotalAssets`.
