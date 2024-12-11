@@ -949,6 +949,11 @@ contract LoopStrategy is
 
         vault.redeem(sharesToWithdraw, receiver, address(this));
 
+        uint256 nativeToWithdraw = IERC20(wFlow)
+            .balanceOf(address(this))
+            .wMulDown(percentage);
+        SafeERC20.safeTransfer(IERC20(wFlow), receiver, nativeToWithdraw);
+
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 

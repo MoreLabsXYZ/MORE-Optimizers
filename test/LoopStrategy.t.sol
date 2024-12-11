@@ -641,7 +641,11 @@ contract LoopStrategyTest is Test {
             ankrFlowBalanceBefore + ankrFlowAmount - swapCost,
             10
         );
-        assertEq(wFlow.balanceOf(alice), wFlowBalanceBefore + wFlowAmount);
+        assertApproxEqAbs(
+            wFlow.balanceOf(alice),
+            wFlowBalanceBefore + wFlowAmount,
+            10
+        );
 
         Position memory position = markets.position(
             marketId,
@@ -910,7 +914,11 @@ contract LoopStrategyTest is Test {
             ankrFlowBalanceBefore + ankrFlowAmount - swapCost,
             10
         );
-        assertEq(wFlow.balanceOf(alice), wFlowBalanceBefore + wFlowAmount);
+        assertApproxEqAbs(
+            wFlow.balanceOf(alice),
+            wFlowBalanceBefore + wFlowAmount,
+            10
+        );
 
         Position memory position = markets.position(
             marketId,
