@@ -679,19 +679,10 @@ contract LoopStrategy is
             assets
         );
 
-        // calculating amount of deposit in ankrFlow
-        uint256 depositAmountInAnkrFlow = ICertificateToken(ankrFlow)
-            .bondsToShares(assets);
-        // calculating how much we should provide as collateral in ankrFlow
-        uint256 toSupplyAsCollateral = depositAmountInAnkrFlow
-            .wMulDown(100 * WAD)
-            .wDivDown(100 * WAD + targetStrategyLtv.wMulDown(100 * WAD))
-            .wMulDown(100 * WAD)
-            .wDivDown(100 * WAD) - 1;
-        // calcaulating how much should be provided as supply to the vault in FLOW
-        uint256 toSupply = ICertificateToken(ankrFlow).sharesToBonds(
-            toSupplyAsCollateral.wMulDown(targetStrategyLtv)
-        );
+        (
+            uint256 toSupplyAsCollateral,
+            uint256 toSupply
+        ) = _calculateAmountsToSupply(assets);
 
         vault.deposit(toSupply, address(this));
 
@@ -815,7 +806,7 @@ contract LoopStrategy is
         emit Deposit(caller, receiver, assets, shares);
     }
 
-    /// @dev Returns the maximum amount of assets that the vault can supply on Morpho.
+    /// @dev Returns the maximum amount of assets that the vault can supply to strategy.
     function _maxDeposit() internal view returns (uint256 totalSuppliable) {
         Market memory market = markets.market(marketId);
 
@@ -827,12 +818,28 @@ contract LoopStrategy is
         if (utilization > targetUtilization) return 0;
 
         // Since totalSuppliable in our case should be equal to
-        // targetUtilization = (totalBorrowAssets + totalSuppliable) / (totalSupplyAssets + totalSuppliable)
-        // we can calculate totalSuppliable as follows
-        // totalSuppliable = (targetUtilization * totalSupplyAssets - totalBorrowAssets) / (WAD - targetUtilization)
-        totalSuppliable = (market.totalSupplyAssets.wMulDown(
-            targetUtilization
-        ) - market.totalBorrowAssets).wDivDown(WAD - targetUtilization);
+        // targetUtilization = (totalBorrowAssets + suppliedAssetsAfterSplit) / (totalSupplyAssets + suppliedAssetsAfterSplit)
+        // but suppliedAssetsAfterSplit should be less than suppliableToMorphoVault = vault.maxDeposit()
+        // hence
+        // suppliedAssetsAfterSplit = min(suppliableToMorphoVault, (targetUtilization * totalSupplyAssets - totalBorrowAssets) / (WAD - targetUtilization))
+        // now we have to calculate amount of assets that can be deposited in this strategy, before split into collateral and supply
+        // to calculate it, we can use flow of the _calculateAmountsToSupply function but reverse it
+        // totalSuppliable = (suppliableAssetsAfterSplit(in ankrFlow) / targetStrategyLtv + 1).convertToWFlow() * (100 + targetStrategyLtv) / 100
+
+        uint256 suppliableAssetsAfterSplit = Math.min(
+            vault.maxDeposit(address(this)),
+            (market.totalSupplyAssets.wMulDown(targetUtilization) -
+                market.totalBorrowAssets).wDivDown(WAD - targetUtilization)
+        );
+
+        totalSuppliable = ICertificateToken(ankrFlow)
+            .sharesToBonds(
+                ICertificateToken(ankrFlow)
+                    .bondsToShares(suppliableAssetsAfterSplit)
+                    .wDivDown(targetStrategyLtv) + 1
+            )
+            .wMulDown(100 * WAD + targetStrategyLtv.wMulDown(100 * WAD))
+            .wDivDown(100 * WAD);
     }
 
     /**
@@ -950,5 +957,30 @@ contract LoopStrategy is
         if (percentage > 999999999999990000) {
             percentage = WAD;
         }
+    }
+
+    /// @notice Calculates the amounts to supply as collateral and to the vault
+    /// @dev This function performs calculations based on the provided `assets` and strategy-specific parameters.
+    /// @param assets The amount of assets to calculate supply amounts for.
+    /// @return toSupplyAsCollateral The amount to be supplied as collateral in ankrFlow.
+    /// @return toSupply The amount to be provided as supply to the vault in FLOW.
+    function _calculateAmountsToSupply(
+        uint256 assets
+    ) internal view returns (uint256 toSupplyAsCollateral, uint256 toSupply) {
+        // calculating amount of deposit in ankrFlow
+        uint256 depositAmountInAnkrFlow = ICertificateToken(ankrFlow)
+            .bondsToShares(assets);
+        // calculating how much we should provide as collateral in ankrFlow
+        toSupplyAsCollateral =
+            depositAmountInAnkrFlow
+                .wMulDown(100 * WAD)
+                .wDivDown(100 * WAD + targetStrategyLtv.wMulDown(100 * WAD))
+                .wMulDown(100 * WAD)
+                .wDivDown(100 * WAD) -
+            1;
+        // calcaulating how much should be provided as supply to the vault in FLOW
+        toSupply = ICertificateToken(ankrFlow).sharesToBonds(
+            toSupplyAsCollateral.wMulDown(targetStrategyLtv)
+        );
     }
 }
