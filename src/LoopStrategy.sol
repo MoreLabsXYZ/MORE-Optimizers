@@ -19,6 +19,7 @@ import {Ownable2StepUpgradeable, OwnableUpgradeable} from "@openzeppelin/contrac
 import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import {IERC4626, ERC4626Upgradeable, Math, SafeERC20, IERC20, ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {Bytes} from "@openzeppelin/contracts/utils/Bytes.sol";
 
 import {IWNative} from "./interfaces/IWNative.sol";
 
@@ -35,6 +36,7 @@ contract LoopStrategy is
     using Math for uint256;
     using UtilsLib for uint256;
     using SharesMathLib for uint256;
+    using Bytes for bytes;
 
     /// @inheritdoc ILoopStrategy
     IMoreMarkets public markets;
@@ -86,6 +88,8 @@ contract LoopStrategy is
     error ZeroFeeRecipient();
     /// @notice Emitted when the caller is unauthorized.
     error Unauthorized();
+    /// @notice Emitted when the path is invalid, tokenIn should be wFlow and tokenOut ankrFlow.
+    error InvalidPath();
 
     /// @inheritdoc ILoopStrategy
     function initialize(
@@ -885,6 +889,14 @@ contract LoopStrategy is
     ) internal nonReentrant {
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
+        }
+
+        {
+            address tokenIn = address(bytes20(path.slice(0, 20)));
+            address tokenOut = address(
+                bytes20(path.slice(path.length - 20, path.length))
+            );
+            if (tokenIn != wFlow || tokenOut != ankrFlow) revert InvalidPath();
         }
 
         _burn(owner, shares);

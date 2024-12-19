@@ -893,6 +893,32 @@ contract LoopStrategyTest is Test {
         assertEq(vault.balanceOf(address(strategy)), 0);
     }
 
+    function test_withdraw_shouldRevertIfPathIncorrect() public {
+        uint256 amountToDeposit = 1 ether;
+
+        startHoax(owner);
+        swapMaxLossPercent *= 6;
+        strategy.setSwapMaxLossPercent(swapMaxLossPercent);
+
+        bytes memory customPath = abi.encodePacked(
+            address(ankrFlow),
+            uint24(3000),
+            address(wFlow)
+        );
+
+        startHoax(alice);
+        IWNative(wFlow).deposit{value: amountToDeposit * 1e4}();
+
+        wFlow.approve(address(strategy), amountToDeposit);
+        strategy.deposit(amountToDeposit, alice);
+
+        uint256 amountToRedeem = strategy.balanceOf(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(LoopStrategy.InvalidPath.selector)
+        );
+        strategy.redeem(amountToRedeem, alice, alice, customPath);
+    }
+
     function test_withdraw_fullWithdrawOneUserWithCustomPath(
         uint256 amountToDeposit
     ) public {
