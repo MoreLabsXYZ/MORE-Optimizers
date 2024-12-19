@@ -409,6 +409,58 @@ contract LoopStrategyTest is Test {
         assertLe(utilization, targetUtilization);
     }
 
+    function test_deposit_oneUserMaxDeposit() public {
+        // firstly accrue interest on the market to get accurate state of it in maxDeposit()
+        (
+            bool isPrem,
+            address loanToken,
+            address collateralToken,
+            address oracle,
+            address irm,
+            uint256 lltv,
+            address cas,
+            uint96 irxMaxLltv,
+            uint256[] memory lltvsFromContract
+        ) = markets.idToMarketParams(marketId);
+        MarketParams memory marketParams = MarketParams(
+            isPrem,
+            loanToken,
+            collateralToken,
+            oracle,
+            irm,
+            lltv,
+            cas,
+            irxMaxLltv,
+            lltvsFromContract
+        );
+        markets.accrueInterest(marketParams);
+
+        uint256 amountToDeposit = strategy.maxDeposit(alice);
+        startHoax(alice);
+
+        IWNative(wFlow).deposit{value: amountToDeposit}();
+        assertEq(wFlow.balanceOf(alice), amountToDeposit);
+
+        wFlow.approve(address(strategy), amountToDeposit);
+        strategy.deposit(amountToDeposit, alice);
+
+        assertEq(strategy.balanceOf(alice), amountToDeposit);
+        assertApproxEqAbs(strategy.totalAssets(), amountToDeposit, 1e3);
+        assertEq(
+            strategy.convertToAssets(strategy.balanceOf(alice)),
+            strategy.totalAssets()
+        );
+
+        Market memory market = markets.market(marketId);
+        uint256 utilization = uint256(
+            market.totalSupplyAssets > 0
+                ? (market.totalBorrowAssets).wDivDown(market.totalSupplyAssets)
+                : 0
+        );
+        assertLe(utilization, targetUtilization);
+        assertApproxEqAbs(strategy.maxDeposit(alice), 0, 1e3);
+    }
+
     function test_deposit_shouldRevertIfUtilizationExceedsTarget() public {
         uint256 amountToDeposit = MAX_TEST_DEPOSIT;
         startHoax(alice);
